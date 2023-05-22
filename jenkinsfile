@@ -1,0 +1,64 @@
+pipeline {
+  agent any
+
+  stage {
+    stage('Clone Repository') {
+            step {
+                git branch: main, url: 'https://github.com/RevEmmanuel/shorten.git'
+            }
+    }
+    stage('Build and Package) {
+            steps {
+                sh 'maven clean-install'
+            }
+    }
+    stage('Docker Build') {
+      steps {
+        // Checkout source code
+        checkout scm
+	  sh docker install shortener-app
+
+        // Build Docker image
+        sh 'docker build -t shortener-app .'
+      }
+
+	
+    }
+
+    stage('Push') {
+      steps {
+	  // Authenticate 
+	  sh 'docker login -u username -p password'
+
+        // Push Docker image to container registry
+        sh 'docker push docker.io/shortener-app-image'
+	  sh 'docker push docker.io/shortener-app-latest'
+
+	  // Logout from Docker Hub
+        sh 'docker logout-user'
+      }
+    }
+
+	stage('Push to EC2') {
+  steps {
+    // Copy Docker image to EC2 instance
+    sshagent(['id']) {
+      sh "scp -i path/to/your/key shortener-app.tar user@ec2-100-26-141-152.compute-1.amazonaws.com:/home/ec2-user/shortener-app-backend.tar"
+    }
+
+    // SSH into EC2 instance and load Docker image
+    sshagent(['id']) {
+      sh "ssh -i path/to/your/key user@ec2-100-26-141-152.compute-1.amazonaws.com 'docker load -i /home/ec2-user/shortener-app-backend.tar'"
+    }
+  }
+}
+
+    stage('Deploy') {
+      steps {
+        // SSH into EC2 instance and deploy the Docker image
+        sh 'ssh user@ec2-100-26-141-152.compute-1.amazonaws.com "docker pull docker.io/shortener-app"'
+        sh 'ssh user@ec2-100-26-141-152.compute-1.amazonaws.com "docker run -d --name url-shortener-backend -p 8080:8080 docker.io/shortener-app"'
+     }
+    }
+  }
+}
